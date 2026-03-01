@@ -60,7 +60,7 @@ class NowPlaying():
 
     def set_channel(self, channel):
         """Set the channel number, or None."""
-        if channel is not None:
+        if channel is not None and 0 <= channel < len(STREAMS):
             station = STREAMS[channel]['station']
             self.url = NOWPLAYING_URL.format(station)
         else:
@@ -76,24 +76,27 @@ class NowPlaying():
         now = time.time()
         if now < self.next_update:
             return
-        response = requests.get(self.url, timeout=2)
-        response.raise_for_status()
-        data = response.json()
-        songs = {}
-        key = build_key((
-            data['now_playing']['song']['artist'],
-            data['now_playing']['song']['title'],
-        ))
-        songs[key] = {
-            'artist': data['now_playing']['song']['artist'],
-            'cover':  data['now_playing']['song']['art'],
-            'title':  data['now_playing']['song']['title'],
-            'genre':  data['now_playing']['song']['genre'],
-            'album':  data['now_playing']['song']['album'],
-        }
-        self._current = songs[key]
-        self.songs = songs
-        self.next_update = now + data['now_playing']['remaining']
+        try:
+            response = requests.get(self.url, timeout=2)
+            response.raise_for_status()
+            data = response.json()
+            song = data['now_playing']['song']
+            songs = {}
+            key = build_key((song['artist'], song['title']))
+            songs[key] = {
+                'artist': song['artist'],
+                'cover':  song.get('art', ''),
+                'title':  song['title'],
+                'genre':  song.get('genre', ''),
+                'album':  song.get('album', ''),
+            }
+            self._current = songs[key]
+            self.songs = songs
+            self.next_update = now + data['now_playing'].get('remaining', 30)
+        except Exception:
+            # Network error, HTTP error, or unexpected API response —
+            # keep existing metadata and retry after 30 seconds
+            self.next_update = now + 30
 
 
 def build_key(strings):
